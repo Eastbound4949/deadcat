@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime state (written by bot, not source code)
+watchlist.json
+positions.json
+balance.json
+dcb_paper_trades.csv
+
+# Large data files
+data/
+results/
+
+# Temp
+0
+readme.txt
