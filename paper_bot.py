@@ -88,8 +88,10 @@ _ex: ccxt.Exchange | None = None
 def ex() -> ccxt.Exchange:
     global _ex
     if _ex is None:
+        # Gate.io perpetuals use 'swap' type; Binance/Bybit use 'future'
+        market_type = "swap" if EXCHANGE in ("gate", "gateio") else "future"
         _ex = getattr(ccxt, EXCHANGE)({"apiKey": API_KEY, "secret": API_SECRET,
-                                        "options": {"defaultType": "future"}})
+                                        "options": {"defaultType": market_type}})
     return _ex
 
 
