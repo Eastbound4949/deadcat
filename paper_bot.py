@@ -409,13 +409,16 @@ def run():
         wl[sym]["traded"] = True
         save_watchlist(wl)
 
-        msg = (f"*DCB SHORT SIGNAL — {sym}*\n"
-               f"Pump was: +{info['pump_pct']}% (added {info['added_utc'][:10]})\n"
+        trade_count = sum(1 for _ in open(TRADES_FILE)) - 1 if TRADES_FILE.exists() else 0
+        first_flag  = " — FIRST PAPER TRADE!" if trade_count <= 0 else f" (trade #{trade_count + 1})"
+        msg = (f"*DCB SHORT OPENED{first_flag}*\n"
+               f"Pair : {sym}\n"
+               f"Pump : +{info['pump_pct']}% on {info['added_utc'][:10]}\n"
                f"Entry: ${sig['entry']:.4f}\n"
-               f"SL: ${sig['sl']:.4f} ({sig['sl_risk']*100:.1f}% risk)\n"
-               f"TP1: ${sig['tp1']:.4f} (-{TP1_PCT*100:.0f}%)\n"
-               f"TP2: ${sig['tp2']:.4f} (-{TP2_PCT*100:.0f}%)\n"
-               f"Notional: ${p['notional']:,.2f} | Balance: ${balance:,.2f}")
+               f"SL   : ${sig['sl']:.4f} ({sig['sl_risk']*100:.1f}% above entry)\n"
+               f"TP1  : ${sig['tp1']:.4f} (-{TP1_PCT*100:.0f}%)\n"
+               f"TP2  : ${sig['tp2']:.4f} (-{TP2_PCT*100:.0f}%)\n"
+               f"Size : ${p['notional']:,.2f} notional | Bal: ${balance:,.2f}")
         print(f"[entry] {sym} entry=${sig['entry']:.4f} SL=${sig['sl']:.4f} TP2=${sig['tp2']:.4f}")
         tg(msg)
         trades_this_run += 1
@@ -437,7 +440,13 @@ if __name__ == "__main__":
     print(f" Balance  : ${load_balance():,.2f} (paper)")
     print("=" * 56)
 
-    tg(f"*DCB Scanner Bot started*\nExchange: {EXCHANGE}\nGate: +{PUMP_MIN_PCT}% daily\nBalance: ${load_balance():,.2f}")
+    wl_count = len(load_watchlist())
+    tg(f"*DCB Scanner Bot started*\n"
+       f"Exchange : {EXCHANGE}\n"
+       f"Threshold: +{PUMP_MIN_PCT}% daily pump -> watchlist\n"
+       f"Balance  : ${load_balance():,.2f} paper\n"
+       f"Watchlist: {wl_count} pairs already monitored\n"
+       f"Signal: EMA{EMA_FAST} rejection + vol filter + ATR SL")
 
     run()
 
