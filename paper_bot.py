@@ -131,31 +131,54 @@ def log_trade(row: dict):
 # ─── Scanner ─────────────────────────────────────────────────────────────────
 
 def scan_movers(wl: dict) -> list[str]:
-    """Return list of new symbols that pumped >=PUMP_MIN_PCT today."""
-    print("[scanner] Fetching all tickers ...", flush=True)
+    """
+    Fetch 24h tickers from Binance UM Futures public API (no auth needed).
+    Public endpoint is NOT geo-blocked — only auth/account endpoints are.
+    Falls back to ccxt if Binance is unreachable.
+    """
+    print("[scanner] Fetching all tickers (Binance public API) ...", flush=True)
+    tickers_raw = []
     try:
-        tickers = ex().fetch_tickers()
+        resp = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", timeout=30)
+        resp.raise_for_status()
+        tickers_raw = resp.json()
+        print(f"[scanner] Got {len(tickers_raw)} tickers from Binance UM")
     except Exception as e:
-        print(f"[scanner] fetch_tickers failed: {e}")
-        return []
+        print(f"[scanner] Binance public API failed: {e} — trying ccxt fallback")
+        try:
+            market_type = "swap" if EXCHANGE in ("gate", "gateio") else "future"
+            raw_ex = getattr(ccxt, EXCHANGE)({"options": {"defaultType": market_type}})
+            ccxt_t = raw_ex.fetch_tickers()
+            tickers_raw = [{"symbol": s.replace("/USDT:USDT", "USDT").replace("/", ""),
+                             "priceChangePercent": str(t.get("percentage", 0) or 0),
+                             "lastPrice": str(t.get("last", 0) or 0)}
+                           for s, t in ccxt_t.items() if "/USDT:USDT" in s]
+        except Exception as e2:
+            print(f"[scanner] ccxt fallback also failed: {e2}")
+            return []
 
     new_syms = []
-    for sym, t in tickers.items():
-        # Only USDT perpetuals
-        if not sym.endswith("/USDT:USDT"):
+    for t in tickers_raw:
+        raw_sym = t.get("symbol", "")
+        # Binance format: BTCUSDT → convert to ccxt format BTC/USDT:USDT
+        if not raw_sym.endswith("USDT"):
             continue
-        pct = t.get("percentage", 0) or 0
-        price = t.get("last", 0) or 0
-        if price < 0.0001:   # skip sub-penny
+        base = raw_sym[:-4]  # strip USDT suffix
+        ccxt_sym = f"{base}/USDT:USDT"
+
+        pct   = float(t.get("priceChangePercent", 0) or 0)
+        price = float(t.get("lastPrice", 0) or 0)
+
+        if price < 0.0001:  # skip sub-penny
             continue
-        if pct >= PUMP_MIN_PCT and sym not in wl:
-            wl[sym] = {
+        if pct >= PUMP_MIN_PCT and ccxt_sym not in wl:
+            wl[ccxt_sym] = {
                 "added_utc": datetime.now(timezone.utc).isoformat(),
                 "pump_pct":  round(pct, 1),
                 "traded":    False,
             }
-            new_syms.append(sym)
-            print(f"  [+] {sym:30s} +{pct:.1f}% daily pump")
+            new_syms.append(ccxt_sym)
+            print(f"  [+] {ccxt_sym:30s} +{pct:.1f}% daily pump")
 
     return new_syms
 
